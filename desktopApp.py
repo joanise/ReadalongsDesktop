@@ -18,6 +18,8 @@ from readalongs.align import create_input_tei, align_audio
 from readalongs.text.util import save_txt, save_xml, save_minimal_index_html
 from readalongs.util import getLangs
 from readalongs.log import LOGGER
+import readalongs.cli
+import click.testing
 
 HOST = "127.0.0.1"
 PORT = 7000
@@ -263,6 +265,49 @@ class readalongsUI(QMainWindow):
             f"Successfully stopped server. Now you can resubmit new files.")
 
     def align(self):
+        # This variant works OK, and gets all the default behaviours by default.
+        # Problem: according to
+        # https://click.palletsprojects.com/en/6.x/api/?highlight=clirunner#click.testing.CliRunner,
+        # this "only works in single-threaded systems without any concurrency as it
+        # changes the global interpreter state." So it's not a good solution.
+        # There's a cost to doing logic in a click app... :(
+        # I guess best practice is to make the clik all the thinnest possible shim,
+        # with as much of the logic as possible in a regular Python function.
+        runner = click.testing.CliRunner()
+        results = runner.invoke(readalongs.cli.align,
+            [
+                "-l", self.config["language"],
+                "-f",
+                self.config["textfile"],
+                self.config["audiofile"],
+                self.config["output_base"],
+            ]
+        )
+        LOGGER.info(results.output)
+        return
+
+        # This variant works, but we have to specify *all* the arguments to align(),
+        # even the ones marked obsolete. This code would have to be changed any time
+        # anything changes to the CLI! Not robust...
+        readalongs.cli.align.callback(
+            textfile=self.config["textfile"],
+            audiofile=self.config["audiofile"],
+            output_base=self.config["output_base"],
+            language=[self.config["language"], *self.config["g2p_fallbacks"]],
+            force_overwrite=self.config["force_overwrite"],
+            g2p_fallback=None,
+            save_temps=self.config["save_temps"],
+            debug=False,
+            text_input=None,
+            lang_no_append_und=False,
+            debug_g2p=False,
+            g2p_verbose=False,
+            output_formats=(),
+        )
+        return
+
+        # Original code repeats stuff already implemented in Studio.  Can we factor
+        # this out and use what's already implemented in readalongs.cli???
         temp_base = None
         # if text, turn to xml first
         if self.config["textfile"].split(".")[-1] == "txt":
